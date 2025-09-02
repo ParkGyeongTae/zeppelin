@@ -227,6 +227,7 @@ export class NotebookActionBarComponent extends MessageListenersManager implemen
 
   moveNoteToTrash() {
     this.messageService.moveNoteToTrash(this.note.id);
+    this.router.navigate(['/']);
   }
 
   get isTrash() {
@@ -286,6 +287,7 @@ export class NotebookActionBarComponent extends MessageListenersManager implemen
 
   constructor(
     public messageService: MessageService,
+    @Inject(TRASH_FOLDER_ID_TOKEN) public TRASH_FOLDER_ID: string,
     private nzModalService: NzModalService,
     private ticketService: TicketService,
     private nzMessageService: NzMessageService,
@@ -293,7 +295,6 @@ export class NotebookActionBarComponent extends MessageListenersManager implemen
     private cdr: ChangeDetectorRef,
     private noteStatusService: NoteStatusService,
     private notebookService: NotebookService,
-    @Inject(TRASH_FOLDER_ID_TOKEN) public TRASH_FOLDER_ID: string,
     private activatedRoute: ActivatedRoute,
     private saveAsService: SaveAsService
   ) {
