@@ -64,7 +64,7 @@ type Mode = 'edit' | 'command';
 })
 export class NotebookParagraphComponent extends ParagraphBase implements OnInit, OnChanges, OnDestroy, AfterViewInit {
   @ViewChild(NotebookParagraphCodeEditorComponent, { static: false })
-  notebookParagraphCodeEditorComponent!: NotebookParagraphCodeEditorComponent;
+  notebookParagraphCodeEditorComponent?: NotebookParagraphCodeEditorComponent;
   @ViewChildren(NotebookParagraphResultComponent) notebookParagraphResultComponents!: QueryList<
     NotebookParagraphResultComponent
   >;
@@ -84,6 +84,7 @@ export class NotebookParagraphComponent extends ParagraphBase implements OnInit,
   @Output() readonly triggerSaveParagraph = new EventEmitter<string>();
   @Output() readonly selected = new EventEmitter<string>();
   @Output() readonly selectAtIndex = new EventEmitter<number>();
+  @Output() readonly searchCode = new EventEmitter();
 
   private destroy$ = new Subject();
   private mode: Mode = 'command';
@@ -155,6 +156,11 @@ export class NotebookParagraphComponent extends ParagraphBase implements OnInit,
     }
   }
 
+  toggleEditorShow() {
+    this.setEditorHide(!this.paragraph.config.editorHide);
+    this.commitParagraph();
+  }
+
   saveParagraph() {
     const dirtyText = this.paragraph.text;
     if (dirtyText === undefined || dirtyText === this.originalText) {
@@ -174,15 +180,22 @@ export class NotebookParagraphComponent extends ParagraphBase implements OnInit,
           nzContent: `All the paragraphs can't be deleted`
         });
       } else {
-        this.nzModalService.confirm({
-          nzTitle: 'Delete Paragraph',
-          nzContent: 'Do you want to delete this paragraph?',
-          nzOnOk: () => {
-            this.messageService.paragraphRemove(this.paragraph.id);
-            this.cdr.markForCheck();
-            // TODO(hsuanxyz) moveFocusToNextParagraph
-          }
-        });
+        this.nzModalService
+          .confirm({
+            nzTitle: 'Delete Paragraph',
+            nzContent: 'Do you want to delete this paragraph?',
+            nzAutofocus: null,
+            nzOnOk: () => true
+          })
+          .afterClose.pipe(takeUntil(this.destroy$))
+          .subscribe(result => {
+            // In the modal, clicking "Cancel" makes result undefined.
+            // Clicking "OK" makes result defined and passes the condition below.
+            if (result) {
+              this.messageService.paragraphRemove(this.paragraph.id);
+              this.cdr.markForCheck();
+            }
+          });
       }
     }
   }
@@ -200,14 +213,19 @@ export class NotebookParagraphComponent extends ParagraphBase implements OnInit,
         params: p.settings.params
       };
     });
-    this.nzModalService.confirm({
-      nzTitle: 'Run all above?',
-      nzContent: 'Are you sure to run all above paragraphs?',
-      nzOnOk: () => {
-        this.messageService.runAllParagraphs(this.note.id, paragraphs);
-      }
-    });
-    // TODO(hsuanxyz): save cursor
+    this.nzModalService
+      .confirm({
+        nzTitle: 'Run all above?',
+        nzContent: 'Are you sure to run all above paragraphs?',
+        nzOnOk: () => {
+          this.messageService.runAllParagraphs(this.note.id, paragraphs);
+        }
+      })
+      .afterClose.pipe(takeUntil(this.destroy$))
+      .subscribe(() => {
+        this.waitConfirmFromEdit = false;
+        this.notebookParagraphCodeEditorComponent?.setRestorePosition();
+      });
   }
 
   doubleClickParagraph() {
@@ -217,7 +235,9 @@ export class NotebookParagraphComponent extends ParagraphBase implements OnInit,
     if (this.paragraph.config.editorSetting.editOnDblClick && this.revisionView !== true) {
       this.paragraph.config.editorHide = false;
       this.paragraph.config.tableHide = true;
-      // TODO(hsuanxyz): focus editor
+      this.focusEditor();
+      this.cdr.detectChanges();
+      this.notebookParagraphCodeEditorComponent?.setCursorPositionToEnd();
     }
   }
 
@@ -245,8 +265,8 @@ export class NotebookParagraphComponent extends ParagraphBase implements OnInit,
       .afterClose.pipe(takeUntil(this.destroy$))
       .subscribe(() => {
         this.waitConfirmFromEdit = false;
+        this.notebookParagraphCodeEditorComponent?.setRestorePosition();
       });
-    // TODO(hsuanxyz): save cursor
   }
 
   cloneParagraph(position: string = 'below', newText?: string) {
@@ -356,7 +376,7 @@ export class NotebookParagraphComponent extends ParagraphBase implements OnInit,
     this.cdr.markForCheck();
   }
 
-  moveUpParagraph() {
+  moveCursorUp() {
     const newIndex = this.note.paragraphs.findIndex(p => p.id === this.paragraph.id) - 1;
     if (newIndex < 0 || newIndex >= this.note.paragraphs.length) {
       return;
@@ -369,7 +389,7 @@ export class NotebookParagraphComponent extends ParagraphBase implements OnInit,
     this.messageService.moveParagraph(this.paragraph.id, newIndex);
   }
 
-  moveDownParagraph() {
+  moveCursorDown() {
     const newIndex = this.note.paragraphs.findIndex(p => p.id === this.paragraph.id) + 1;
     if (newIndex < 0 || newIndex >= this.note.paragraphs.length) {
       return;
@@ -380,6 +400,28 @@ export class NotebookParagraphComponent extends ParagraphBase implements OnInit,
     this.saveParagraph();
     this.triggerSaveParagraph.emit(nextParagraph.id);
     this.messageService.moveParagraph(this.paragraph.id, newIndex);
+  }
+
+  moveParagraphUp() {
+    const newIndex = this.note.paragraphs.findIndex(p => p.id === this.paragraph.id) - 1;
+    if (newIndex < 0 || newIndex >= this.note.paragraphs.length) {
+      return;
+    }
+    this.messageService.moveParagraph(this.paragraph.id, newIndex);
+  }
+
+  moveParagraphDown() {
+    const newIndex = this.note.paragraphs.findIndex(p => p.id === this.paragraph.id) + 1;
+    if (newIndex < 0 || newIndex >= this.note.paragraphs.length) {
+      return;
+    }
+    this.messageService.moveParagraph(this.paragraph.id, newIndex);
+  }
+
+  clearParagraphOutput() {
+    if (!this.isEntireNoteRunning) {
+      this.messageService.paragraphClearOutput(this.paragraph.id);
+    }
   }
 
   changeColWidth(needCommit: boolean, updateResult = true) {
@@ -485,88 +527,14 @@ export class NotebookParagraphComponent extends ParagraphBase implements OnInit,
           return; // ignore shortcut to make input work
         }
 
-        if (this.mode === 'command') {
-          switch (action) {
-            case ParagraphActions.InsertAbove:
-              this.insertParagraph('above');
-              break;
-            case ParagraphActions.InsertBelow:
-              this.insertParagraph('below');
-              break;
-            case ParagraphActions.SwitchEditorShow:
-              this.setEditorHide(!this.paragraph.config.editorHide);
-              this.commitParagraph();
-              break;
-            case ParagraphActions.SwitchOutputShow:
-              this.setTableHide(!this.paragraph.config.tableHide);
-              this.commitParagraph();
-              break;
-            case ParagraphActions.SwitchTitleShow:
-              this.paragraph.config.title = !this.paragraph.config.title;
-              this.commitParagraph();
-              break;
-            case ParagraphActions.SwitchLineNumber:
-              this.paragraph.config.lineNumbers = !this.paragraph.config.lineNumbers;
-              this.commitParagraph();
-              break;
-            case ParagraphActions.MoveToUp:
-              event.preventDefault();
-              this.moveUpParagraph();
-              break;
-            case ParagraphActions.MoveToDown:
-              event.preventDefault();
-              this.moveDownParagraph();
-              break;
-            case ParagraphActions.SwitchEnable:
-              this.paragraph.config.enabled = !this.paragraph.config.enabled;
-              this.commitParagraph();
-              break;
-            case ParagraphActions.ReduceWidth:
-              if (!this.paragraph.config.colWidth) {
-                throw new Error('colWidth is required');
-              }
-              this.paragraph.config.colWidth = Math.max(1, this.paragraph.config.colWidth - 1);
-              this.cdr.markForCheck();
-              this.changeColWidth(true);
-              break;
-            case ParagraphActions.IncreaseWidth:
-              if (!this.paragraph.config.colWidth) {
-                throw new Error('colWidth is required');
-              }
-              this.paragraph.config.colWidth = Math.min(12, this.paragraph.config.colWidth + 1);
-              this.cdr.markForCheck();
-              this.changeColWidth(true);
-              break;
-            case ParagraphActions.Delete:
-              this.removeParagraph();
-              break;
-            case ParagraphActions.SelectAbove:
-              event.preventDefault();
-              this.selectAtIndex.emit(this.index - 1);
-              break;
-            case ParagraphActions.SelectBelow:
-              event.preventDefault();
-              this.selectAtIndex.emit(this.index + 1);
-              break;
-            default:
-              break;
-          }
-        }
         switch (action) {
-          case ParagraphActions.Link:
-            this.openSingleParagraph(this.paragraph.id);
-            break;
-          case ParagraphActions.EditMode:
-            if (this.mode === 'command') {
-              event.preventDefault();
-            }
-            if (!this.paragraph.config.editorHide) {
-              this.switchMode('edit');
-            }
-            break;
           case ParagraphActions.Run:
             event.preventDefault();
             this.runParagraph();
+            break;
+          case ParagraphActions.RunAbove:
+            this.waitConfirmFromEdit = true;
+            this.runAllAbove();
             break;
           case ParagraphActions.RunBelow:
             this.waitConfirmFromEdit = true;
@@ -575,6 +543,75 @@ export class NotebookParagraphComponent extends ParagraphBase implements OnInit,
           case ParagraphActions.Cancel:
             event.preventDefault();
             this.cancelParagraph();
+            break;
+          case ParagraphActions.MoveCursorUp:
+            event.preventDefault();
+            this.moveCursorUp();
+            break;
+          case ParagraphActions.MoveCursorDown:
+            event.preventDefault();
+            this.moveCursorDown();
+            break;
+          case ParagraphActions.Delete:
+            this.removeParagraph();
+            break;
+          case ParagraphActions.InsertAbove:
+            this.insertParagraph('above');
+            break;
+          case ParagraphActions.InsertBelow:
+            this.insertParagraph('below');
+            break;
+          case ParagraphActions.InsertCopyOfParagraphBelow:
+            this.cloneParagraph('below');
+            break;
+          case ParagraphActions.MoveParagraphUp:
+            event.preventDefault();
+            this.moveParagraphUp();
+            break;
+          case ParagraphActions.MoveParagraphDown:
+            event.preventDefault();
+            this.moveParagraphDown();
+            break;
+          case ParagraphActions.SwitchEnable:
+            this.paragraph.config.enabled = !this.paragraph.config.enabled;
+            this.commitParagraph();
+            break;
+          case ParagraphActions.SwitchOutputShow:
+            this.setTableHide(!this.paragraph.config.tableHide);
+            this.commitParagraph();
+            break;
+          case ParagraphActions.SwitchLineNumber:
+            this.paragraph.config.lineNumbers = !this.paragraph.config.lineNumbers;
+            this.commitParagraph();
+            break;
+          case ParagraphActions.SwitchTitleShow:
+            this.paragraph.config.title = !this.paragraph.config.title;
+            this.commitParagraph();
+            break;
+          case ParagraphActions.Clear:
+            this.clearParagraphOutput();
+            break;
+          case ParagraphActions.Link:
+            this.openSingleParagraph(this.paragraph.id);
+            break;
+          case ParagraphActions.ReduceWidth:
+            if (!this.paragraph.config.colWidth) {
+              throw new Error('colWidth is required');
+            }
+            this.paragraph.config.colWidth = Math.max(1, this.paragraph.config.colWidth - 1);
+            this.cdr.markForCheck();
+            this.changeColWidth(true);
+            break;
+          case ParagraphActions.IncreaseWidth:
+            if (!this.paragraph.config.colWidth) {
+              throw new Error('colWidth is required');
+            }
+            this.paragraph.config.colWidth = Math.min(12, this.paragraph.config.colWidth + 1);
+            this.cdr.markForCheck();
+            this.changeColWidth(true);
+            break;
+          case ParagraphActions.FindInCode:
+            this.searchCode.emit();
             break;
           default:
             break;

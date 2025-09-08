@@ -10,7 +10,13 @@
  * limitations under the License.
  */
 
-import { NgModule } from '@angular/core';
+import { Component, OnInit } from '@angular/core';
 
-@NgModule({})
-export class ZeppelinHeliumModule {}
+@Component({
+  selector: 'zeppelin-shortcut',
+  templateUrl: './shortcut.component.html'
+})
+export class ShortcutComponent implements OnInit {
+  isMac = navigator.appVersion.indexOf('Mac') !== -1;
+  ngOnInit() {}
+}
