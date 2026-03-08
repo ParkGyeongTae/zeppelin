@@ -43,10 +43,11 @@ import {
   NoteStatusService,
   NoteVarShareService,
   SecurityService,
+  ThemeService,
   TicketService
 } from '@zeppelin/services';
 
-import { scrollIntoViewIfNeeded } from '@zeppelin/utility/element';
+import { scrollIntoViewIfNeeded } from '@zeppelin/utility';
 import { NotebookParagraphComponent } from './paragraph/paragraph.component';
 
 @Component({
@@ -104,7 +105,8 @@ export class NotebookComponent extends MessageListenersManager implements OnInit
           }
         });
       }
-      this.titleService.setTitle(this.note?.name + ' - Zeppelin');
+      this.titleService.setTitle(`${this.note?.name} - Zeppelin`);
+      this.themeService.updateMonacoTheme();
       this.cdr.markForCheck();
     }
   }
@@ -180,7 +182,7 @@ export class NotebookComponent extends MessageListenersManager implements OnInit
   }
 
   @MessageListener(OP.SET_NOTE_REVISION)
-  setNoteRevision(data: MessageReceiveDataTypeMap[OP.SET_NOTE_REVISION]) {
+  setNoteRevision(_data: MessageReceiveDataTypeMap[OP.SET_NOTE_REVISION]) {
     const { noteId } = this.activatedRoute.snapshot.params;
     this.router.navigate(['/notebook', noteId]).then();
   }
@@ -216,7 +218,7 @@ export class NotebookComponent extends MessageListenersManager implements OnInit
   }
 
   @MessageListener(OP.PATCH_PARAGRAPH)
-  patchParagraph(data: MessageReceiveDataTypeMap[OP.PATCH_PARAGRAPH]) {
+  patchParagraph(_data: MessageReceiveDataTypeMap[OP.PATCH_PARAGRAPH]) {
     this.collaborativeMode = true;
     this.cdr.markForCheck();
   }
@@ -254,6 +256,10 @@ export class NotebookComponent extends MessageListenersManager implements OnInit
       }
     }
     this.cdr.markForCheck();
+  }
+
+  onParagraphSearch(term: string) {
+    this.listOfNotebookParagraphComponent.forEach(comp => comp.highlightMatches(term || ''));
   }
 
   saveParagraph(id: string) {
@@ -408,7 +414,8 @@ export class NotebookComponent extends MessageListenersManager implements OnInit
     private ticketService: TicketService,
     private securityService: SecurityService,
     private router: Router,
-    private titleService: Title
+    private titleService: Title,
+    private themeService: ThemeService
   ) {
     super(messageService);
   }
